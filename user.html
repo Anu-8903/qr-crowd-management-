@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>User Registration – Crowd Monitoring</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { margin: 0; background: #f4f6f9; color: #333; }
+    header { background: #0f172a; color: #fff; padding: 18px; text-align: center; }
+    .container { max-width: 900px; margin: 30px auto; padding: 20px; }
+    .card { background: #fff; padding: 22px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    h2 { margin: 0 0 12px; color: #1d4ed8; }
+    label { display:block; margin-top: 10px; font-weight: bold; color: #334155; }
+    input { width: 100%; padding: 10px; margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    button { margin-top: 14px; width: 100%; padding: 11px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font-weight: bold; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+    .info { background:#f1f5f9; padding: 12px; border-radius: 10px; }
+    .muted { color:#64748b; font-size: 14px; margin-top: 6px; }
+    .btn { display:inline-block; margin-top: 16px; padding: 10px 18px; background:#0f172a; color:#fff; text-decoration:none; border-radius: 8px; font-weight: bold; }
+    img { max-width: 100%; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; background: #fff; }
+    @media (max-width: 800px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>User Registration</h1>
+    <div class="muted">Enter details → hall allocated → user QR generated</div>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <h2>Register User</h2>
+      <div class="muted">This will allocate a hall automatically (first available).</div>
+
+      <label>Name</label>
+      <input id="name" placeholder="Enter name" />
+
+      <label>Email</label>
+      <input id="email" placeholder="Enter email" />
+
+      <button onclick="registerUser()">Register & Generate User QR</button>
+
+      <div class="row" style="margin-top:18px;">
+        <div class="info">
+          <div><b>User ID:</b> <span id="userId">-</span></div>
+          <div><b>Allocated Hall:</b> <span id="zoneInfo">-</span></div>
+          <div class="muted" id="qrValueBox"></div>
+        </div>
+        <div>
+          <img id="qrImg" style="display:none;" alt="User QR" />
+        </div>
+      </div>
+
+      <a class="btn" href="frontend.html">Back to Home</a>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:8081";
+
+    async function registerUser() {
+      const name = document.getElementById("name").value.trim();
+      const email = document.getElementById("email").value.trim();
+      if (!name || !email) {
+        alert("Please enter name and email");
+        return;
+      }
+
+      const res = await fetch(API_BASE + "/api/user/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, role: "USER" })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || "Registration failed");
+        return;
+      }
+
+      document.getElementById("userId").innerText = data.userId;
+      document.getElementById("zoneInfo").innerText =
+        `#${data.allocatedZoneId} ${data.allocatedZoneName} (${data.allocatedZoneLocation}) cap ${data.allocatedZoneMaxCapacity}`;
+      document.getElementById("qrValueBox").innerText = "QR Value: " + data.userQrValue;
+
+      const img = document.getElementById("qrImg");
+      img.src = "data:image/png;base64," + data.userQrImageBase64;
+      img.style.display = "block";
+    }
+  </script>
+</body>
+</html>
+

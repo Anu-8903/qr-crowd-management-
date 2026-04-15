@@ -1,0 +1,195 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard – Smart Crowd System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./assets/app.css" />
+</head>
+<body>
+
+  <header>
+    <div class="wrap topbar">
+      <div class="brand">
+        <h1>Smart Crowd Management</h1>
+        <div class="sub">Live Monitoring Dashboard • Auto refresh every 3 seconds</div>
+      </div>
+      <div class="nav">
+        <a href="frontend.html">Home</a>
+        <a href="admin.html">Admin</a>
+        <a href="register.html">Register</a>
+        <a href="scanner.html">Scanner</a>
+        <a href="logs.html">Logs</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="grid cols-3" style="margin-bottom:16px;">
+      <div class="card kpi">
+        <div class="muted">Total Zones</div>
+        <div class="val" id="kpiZones">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="muted">Users Inside (Current Crowd)</div>
+        <div class="val" id="kpiCrowd">0</div>
+      </div>
+      <div class="card kpi">
+        <div class="muted">Total Alerts</div>
+        <div class="val" id="kpiAlerts">0</div>
+      </div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <h2 style="margin:0;">Zones (Halls)</h2>
+          <div class="row">
+            <span class="muted" id="lastUpdate">—</span>
+            <button class="btn ghost" onclick="loadAll()">Refresh</button>
+          </div>
+        </div>
+        <div class="muted">Color-coded capacity levels with progress bars.</div>
+        <div id="zonesGrid" class="grid" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="grid" style="gap:16px;">
+        <div class="card">
+          <h2 style="margin:0;">Latest Alerts</h2>
+          <div class="muted">Includes crowd level changes, unauthorized attempts and full capacity warnings.</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Zone</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="alertsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2 style="margin:0;">Recent Entry / Exit Logs</h2>
+          <div class="muted">Latest movement events.</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Zone</th>
+                <th>Move</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./assets/app.js"></script>
+  <script>
+    const zonesGrid = document.getElementById("zonesGrid");
+    const alertsBody = document.getElementById("alertsBody");
+    const logsBody = document.getElementById("logsBody");
+
+    function pill(level){
+      const l = level.toLowerCase();
+      if (l === "full") return "pill full";
+      if (l === "high") return "pill high";
+      if (l === "medium") return "pill medium";
+      return "pill low";
+    }
+
+    function bar(level){
+      const l = level.toLowerCase();
+      if (l === "full") return "bar full";
+      if (l === "high") return "bar high";
+      if (l === "medium") return "bar medium";
+      return "bar low";
+    }
+
+    function fmtTime(iso){
+      try{
+        const d = new Date(iso);
+        return d.toLocaleTimeString();
+      }catch{ return ""; }
+    }
+
+    async function loadAll(){
+      const [zones, alerts, logs] = await Promise.all([
+        APP.json(APP.API_BASE + "/api/admin/zones"),
+        APP.json(APP.API_BASE + "/api/admin/alerts"),
+        APP.json(APP.API_BASE + "/api/admin/entries")
+      ]);
+
+      // KPIs
+      document.getElementById("kpiZones").textContent = zones.length;
+      document.getElementById("kpiAlerts").textContent = alerts.length;
+      const crowd = zones.reduce((sum,z)=>sum + (z.currentCount||0), 0);
+      document.getElementById("kpiCrowd").textContent = crowd;
+      document.getElementById("lastUpdate").textContent = "Updated: " + new Date().toLocaleTimeString();
+
+      // Zones cards
+      zonesGrid.innerHTML = "";
+      zones.forEach(z => {
+        const count = z.currentCount || 0;
+        const cap = z.maxCapacity || 0;
+        const level = APP.computeLevel(count, cap);
+        const pct = cap ? Math.min(100, Math.round((count * 100) / cap)) : 0;
+
+        const el = document.createElement("div");
+        el.className = "card";
+        el.innerHTML = `
+          <div class="row" style="justify-content:space-between;">
+            <div>
+              <div style="font-weight:950">${z.zoneName}</div>
+              <div class="muted">${z.location}</div>
+            </div>
+            <span class="${pill(level)}">${level}</span>
+          </div>
+          <div class="row" style="justify-content:space-between;margin-top:10px;">
+            <div><b>${count}</b> inside</div>
+            <div class="muted">cap ${cap}</div>
+          </div>
+          <div class="${bar(level)}" style="margin-top:10px;">
+            <div style="width:${pct}%;"></div>
+          </div>
+        `;
+        zonesGrid.appendChild(el);
+      });
+
+      // Alerts (show latest 8)
+      alertsBody.innerHTML = "";
+      alerts.slice(0, 8).forEach(a => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${fmtTime(a.alertTime)}</td>
+          <td>${a.zoneName || "-"}</td>
+          <td>${a.alertMessage || ""}</td>
+        `;
+        alertsBody.appendChild(tr);
+      });
+
+      // Logs (show latest 10)
+      logsBody.innerHTML = "";
+      logs.slice(0, 10).forEach(l => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${fmtTime(l.time)}</td>
+          <td>${l.userId}</td>
+          <td>${l.zoneName}</td>
+          <td><b>${l.movementType}</b></td>
+          <td>${l.status}</td>
+        `;
+        logsBody.appendChild(tr);
+      });
+    }
+
+    loadAll();
+    setInterval(loadAll, 3000);
+  </script>
+
+</body>
+</html>

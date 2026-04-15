@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Zone QR Generator - Crowd Monitoring System</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            width: 400px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 90%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            width: 95%;
+            padding: 10px;
+            margin-top: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #qrcode {
+            margin-top: 20px;
+        }
+
+        .user-id {
+            margin-top: 10px;
+            font-weight: bold;
+            color: green;
+        }
+        .back-home{
+            display: block;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+    <h2>Generate Zone QR Code</h2>
+
+    <input type="text" id="zoneName" placeholder="Enter Zone Name" required>
+    <input type="text" id="location" placeholder="Enter Location" required>
+    <input type="number" id="maxCapacity" placeholder="Enter Max Capacity" required>
+
+    <button onclick="createZoneAndGenerateQr()">Create Zone & Generate QR</button>
+
+    <div class="user-id" id="zoneInfo"></div>
+    <div id="qrcodeContainer">
+        <img id="qrImage" alt="Zone QR will appear here" style="margin-top:20px; max-width:100%; display:none;" />
+    </div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:8081";
+
+async function createZoneAndGenerateQr() {
+    const zoneName = document.getElementById("zoneName").value.trim();
+    const location = document.getElementById("location").value.trim();
+    const maxCapacity = document.getElementById("maxCapacity").value.trim();
+
+    if (!zoneName || !location || !maxCapacity) {
+        alert("Please fill all fields");
+        return;
+    }
+
+    try {
+        const createRes = await fetch(API_BASE + "/zones", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                zoneName,
+                location,
+                maxCapacity: Number(maxCapacity)
+            })
+        });
+
+        const zone = await createRes.json();
+        if (!createRes.ok) {
+            alert("Failed to create zone: " + (zone.message || "Unknown error"));
+            return;
+        }
+
+        document.getElementById("zoneInfo").innerText =
+            "Zone ID: " + zone.id + " | " + zone.zoneName +
+            " (" + zone.location + ") - Capacity: " + zone.maxCapacity;
+
+        // As per workflow: QR is generated ONLY after USER registration (not for zones).
+        document.getElementById("qrImage").style.display = "none";
+    } catch (e) {
+        console.error(e);
+        alert("Network error while calling backend");
+    }
+}
+</script>
+
+<a href="frontend.html" class="btn back-home">⬅ Back to Home</a>
+
+</body>
+</html>

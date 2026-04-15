@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Scanner – Smart Crowd System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="./assets/app.css" />
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+
+  <header>
+    <div class="wrap topbar">
+      <div class="brand">
+        <h1>Smart Crowd Management</h1>
+        <div class="sub">Scanner • User QR entry/exit</div>
+      </div>
+      <div class="nav">
+        <a href="frontend.html">Home</a>
+        <a href="admin.html">Admin</a>
+        <a href="register.html">Register</a>
+        <a href="dashboard.html">Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="grid cols-2">
+      <div class="card">
+        <h2>Scan with Camera</h2>
+        <div class="muted">
+          Tracking Prevention warnings can be ignored. If camera scanning is blocked, use Manual QR.
+        </div>
+
+        <label>User ID</label>
+        <input id="userIdInput" type="number" placeholder="Enter numeric user ID" />
+
+        <div id="reader" style="margin-top:12px;"></div>
+        <div class="muted" id="cameraStatus" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>Manual QR (Fallback)</h2>
+        <div class="muted">
+          Paste the QR value from <b>register.html</b> and submit.
+        </div>
+
+        <label>QR Value</label>
+        <input id="qrText" placeholder="UID=...&ZID=...&TS=...&N=...&SIG=..." />
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" onclick="submitManual()">Submit Scan</button>
+          <a class="btn ghost" href="register.html">Get User QR</a>
+        </div>
+
+        <div class="card" style="margin-top:12px;">
+          <div class="muted">Result</div>
+          <div id="result" style="font-weight:950;margin-top:6px;">Waiting for scan...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const resultBox = document.getElementById("result");
+  const userIdInput = document.getElementById("userIdInput");
+  const cameraStatus = document.getElementById("cameraStatus");
+
+  async function sendScanToBackend(decodedText) {
+    const userId = userIdInput.value;
+    if (!userId) {
+      resultBox.innerText = "Please enter User ID first.";
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:8081/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: Number(userId), qrValue: decodedText })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        resultBox.innerText = "Error (" + response.status + "): " + (data.message || "Scan failed");
+        return;
+      }
+
+      const authText = (data.authorized === false) ? "UNAUTHORIZED" : "AUTHORIZED";
+      resultBox.innerText =
+        authText +
+        " | Status: " + data.status +
+        " | Move: " + (data.movementType || "-") +
+        " | Message: " + data.message +
+        " | Zone: " + data.zoneName +
+        " | Crowd: " + data.currentCount + "/" + data.maxCapacity;
+    } catch (e) {
+      console.error(e);
+      resultBox.innerText = "Network error while calling backend.";
+    }
+  }
+
+  function submitManual() {
+    const qr = document.getElementById("qrText").value.trim();
+    if (!qr) {
+      resultBox.innerText = "Please paste QR value.";
+      return;
+    }
+    sendScanToBackend(qr);
+  }
+
+  function onScanSuccess(decodedText) {
+    resultBox.innerText = "Scanned (sending to backend...)";
+    sendScanToBackend(decodedText);
+  }
+
+  // Camera init (optional)
+  try {
+    const html5QrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras()
+      .then(cameras => {
+        if (cameras.length > 0) {
+          cameraStatus.innerText = "Camera ready. Scan the USER QR.";
+          return html5QrCode.start(cameras[0].id, { fps: 10, qrbox: 250 }, onScanSuccess);
+        } else {
+          cameraStatus.innerText = "Camera not found. Use Manual QR.";
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        cameraStatus.innerText = "Camera blocked. Use Manual QR.";
+      });
+  } catch (e) {
+    console.error(e);
+    cameraStatus.innerText = "Scanner library blocked. Use Manual QR.";
+  }
+</script>
+
+</body>
+</html>

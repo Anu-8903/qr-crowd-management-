@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Setup – Smart Crowd System</title>
+  <link rel="stylesheet" href="./assets/app.css" />
+</head>
+<body>
+  <header>
+    <div class="wrap topbar">
+      <div class="brand">
+        <h1>Smart Crowd Management</h1>
+        <div class="sub">Admin Setup • Create zones (halls)</div>
+      </div>
+      <div class="nav">
+        <a href="frontend.html">Home</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="scanner.html">Scanner</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="grid cols-2">
+      <div class="card">
+        <h2>Create Zone</h2>
+        <div class="muted">Phase 1 • Define hall name, location and capacity.</div>
+
+        <label>Zone Name</label>
+        <input id="zoneName" placeholder="e.g., Seminar Hall A" />
+
+        <label>Location</label>
+        <input id="location" placeholder="e.g., Block 1, Floor 2" />
+
+        <label>Capacity</label>
+        <input id="capacity" type="number" min="1" placeholder="e.g., 120" />
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" onclick="createZone()">Create Zone</button>
+          <a class="btn ghost" href="register.html">Go to Registration</a>
+        </div>
+
+        <div class="muted" id="status" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <h2 style="margin:0;">Zones</h2>
+          <button class="btn ghost" onclick="load()">Refresh</button>
+        </div>
+        <div class="muted">Live list of configured halls.</div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Zone</th>
+              <th>Location</th>
+              <th class="right">Crowd</th>
+              <th class="center">Level</th>
+            </tr>
+          </thead>
+          <tbody id="zonesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="row" style="justify-content:space-between;">
+        <h2 style="margin:0;">Pending Users (Approval Required)</h2>
+        <button class="btn ghost" onclick="loadPending()">Refresh</button>
+      </div>
+      <div class="muted">Approve to generate QR. You can change the zone before approval.</div>
+
+      <div class="muted" id="pendingStatus" style="margin-top:8px;"></div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Selected Zone</th>
+            <th class="center">Available</th>
+            <th class="center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="pendingBody"></tbody>
+      </table>
+
+      <div id="qrPanel" class="card" style="display:none;margin-top:12px;">
+        <div class="row" style="justify-content:space-between;">
+          <div><b>Approved User QR</b></div>
+          <button class="btn ghost" onclick="hideQr()">Close</button>
+        </div>
+        <div class="muted" id="qrMeta" style="margin-top:6px;"></div>
+        <img id="qrImg" class="qr-img" style="margin-top:10px;max-width:380px;" alt="Approved User QR" />
+        <div class="row" style="margin-top:10px;">
+          <button class="btn secondary" onclick="downloadApprovedQr()">Download QR</button>
+          <button class="btn ghost" onclick="copyApprovedQr()">Copy QR Value</button>
+        </div>
+        <div class="muted" id="qrValue" style="margin-top:8px;word-break:break-all;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./assets/app.js"></script>
+  <script>
+    const statusEl = document.getElementById("status");
+    const zonesBody = document.getElementById("zonesBody");
+    const pendingBody = document.getElementById("pendingBody");
+    const pendingStatus = document.getElementById("pendingStatus");
+    const qrPanel = document.getElementById("qrPanel");
+    const qrImg = document.getElementById("qrImg");
+    const qrMeta = document.getElementById("qrMeta");
+    const qrValueEl = document.getElementById("qrValue");
+    let lastApprovedQrBase64 = "";
+    let lastApprovedQrValue = "";
+
+    function pillClass(level){
+      const l = level.toLowerCase();
+      if (l === "full") return "pill full";
+      if (l === "high") return "pill high";
+      if (l === "medium") return "pill medium";
+      return "pill low";
+    }
+
+    async function load(){
+      const zones = await APP.json(APP.API_BASE + "/api/admin/zones");
+      zonesBody.innerHTML = "";
+      zones.forEach(z => {
+        const lvl = APP.computeLevel(z.currentCount || 0, z.maxCapacity || 0);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${z.id}</td>
+          <td><b>${z.zoneName}</b></td>
+          <td>${z.location}</td>
+          <td class="right">${z.currentCount || 0}/${z.maxCapacity || 0}</td>
+          <td class="center"><span class="${pillClass(lvl)}">${lvl}</span></td>
+        `;
+        zonesBody.appendChild(tr);
+      });
+    }
+
+    async function loadPending(){
+      pendingStatus.textContent = "";
+      try{
+        const [pending, zones] = await Promise.all([
+          APP.json(APP.API_BASE + "/api/admin/users/pending"),
+          APP.json(APP.API_BASE + "/api/admin/zones")
+        ]);
+
+        pendingBody.innerHTML = "";
+        pending.forEach(u => {
+          const tr = document.createElement("tr");
+          const avail = (u.zoneAvailable != null) ? u.zoneAvailable : "-";
+          const zoneOptions = zones.map(z => {
+            const cap = z.maxCapacity || 0;
+            const cur = z.currentCount || 0;
+            const a = Math.max(cap - cur, 0);
+            const disabled = a <= 0 ? "disabled" : "";
+            const selected = (u.zoneId === z.id) ? "selected" : "";
+            return `<option value="${z.id}" ${selected} ${disabled}>${z.zoneName} • Avl ${a}/${cap}</option>`;
+          }).join("");
+
+          tr.innerHTML = `
+            <td><b>#${u.userId}</b> ${u.name || ""}</td>
+            <td>${u.email || ""}</td>
+            <td>
+              <select data-user="${u.userId}" class="zonePick">
+                ${zoneOptions}
+              </select>
+              <button class="btn ghost" style="padding:6px 10px;margin-top:8px;" onclick="saveZone(${u.userId})">Change Zone</button>
+            </td>
+            <td class="center">${avail}</td>
+            <td class="center">
+              <button class="btn" style="padding:8px 10px;" onclick="approve(${u.userId})">Approve + Generate QR</button>
+              <button class="btn ghost" style="padding:8px 10px;" onclick="reject(${u.userId})">Reject</button>
+            </td>
+          `;
+          pendingBody.appendChild(tr);
+        });
+
+        if(pending.length === 0){
+          pendingStatus.textContent = "No pending users.";
+        }
+      }catch(e){
+        pendingStatus.textContent = "Error: " + e.message;
+      }
+    }
+
+    async function saveZone(userId){
+      const sel = document.querySelector(`select.zonePick[data-user="${userId}"]`);
+      if(!sel) return;
+      try{
+        await APP.json(APP.API_BASE + `/api/admin/users/${userId}/zone`,{
+          method:"PUT",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ zoneId: Number(sel.value) })
+        });
+        pendingStatus.textContent = "Zone updated for user " + userId;
+        await loadPending();
+      }catch(e){
+        pendingStatus.textContent = "Error: " + e.message;
+      }
+    }
+
+    async function approve(userId){
+      pendingStatus.textContent = "";
+      try{
+        const resp = await APP.json(APP.API_BASE + `/api/admin/users/${userId}/approve`, { method:"POST" });
+        lastApprovedQrBase64 = resp.qrImageBase64 || "";
+        lastApprovedQrValue = resp.qrValue || "";
+        qrImg.src = "data:image/png;base64," + lastApprovedQrBase64;
+        qrMeta.textContent = `User ${resp.userId} approved • Zone ${resp.zoneId}`;
+        qrValueEl.textContent = lastApprovedQrValue;
+        qrPanel.style.display = "block";
+        pendingStatus.textContent = "User approved and QR generated.";
+        await loadPending();
+      }catch(e){
+        pendingStatus.textContent = "Error: " + e.message;
+      }
+    }
+
+    async function reject(userId){
+      pendingStatus.textContent = "";
+      try{
+        await APP.json(APP.API_BASE + `/api/admin/users/${userId}/reject`, { method:"POST" });
+        pendingStatus.textContent = "User rejected.";
+        await loadPending();
+      }catch(e){
+        pendingStatus.textContent = "Error: " + e.message;
+      }
+    }
+
+    function hideQr(){
+      qrPanel.style.display = "none";
+    }
+
+    function downloadApprovedQr(){
+      if(!lastApprovedQrBase64) return;
+      const a = document.createElement("a");
+      a.href = "data:image/png;base64," + lastApprovedQrBase64;
+      a.download = "approved-user-qr.png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    async function copyApprovedQr(){
+      if(!lastApprovedQrValue) return;
+      try{
+        await navigator.clipboard.writeText(lastApprovedQrValue);
+        pendingStatus.textContent = "QR value copied.";
+      }catch{
+        pendingStatus.textContent = "Copy failed (browser permission).";
+      }
+    }
+
+    async function createZone(){
+      statusEl.textContent = "";
+      const zoneName = document.getElementById("zoneName").value.trim();
+      const location = document.getElementById("location").value.trim();
+      const maxCapacity = Number(document.getElementById("capacity").value);
+      if(!zoneName || !location || !maxCapacity){
+        statusEl.textContent = "Please fill all fields.";
+        return;
+      }
+
+      try{
+        await APP.json(APP.API_BASE + "/zones", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ zoneName, location, maxCapacity })
+        });
+        statusEl.textContent = "Zone created successfully.";
+        document.getElementById("zoneName").value = "";
+        document.getElementById("location").value = "";
+        document.getElementById("capacity").value = "";
+        await load();
+      }catch(e){
+        statusEl.textContent = "Error: " + e.message;
+      }
+    }
+
+    load();
+    loadPending();
+  </script>
+</body>
+</html>
+

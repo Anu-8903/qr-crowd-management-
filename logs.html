@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Entry / Exit Logs – Crowd Monitoring</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+ * {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: #111827;
+}
+
+/* HEADER */
+header {
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 20px;
+  text-align: center;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+header p {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* CONTAINER */
+.container {
+  max-width: 1000px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+/* CARD */
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+}
+
+/* TITLES */
+h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.card p {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 15px;
+}
+
+/* TABLE */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+/* HEADER ROW */
+table thead {
+  background: #f1f5f9;
+}
+
+table th {
+  text-align: left;
+  padding: 12px;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* BODY ROWS */
+table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #4b5563;
+}
+
+/* ROW HOVER */
+table tbody tr:hover {
+  background: #f9fafb;
+}
+
+/* BADGE STYLE FOR TYPE */
+table td:nth-child(2) {
+  font-weight: 500;
+}
+
+/* ALERT */
+.alert {
+  margin-top: 20px;
+  padding: 14px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  font-size: 14px;
+  border: 1px solid #fee2e2;
+}
+
+/* BUTTON */
+.btn {
+  display: inline-block;
+  margin-top: 25px;
+  padding: 10px 16px;
+  background: #111827;
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  background: #1f2937;
+}
+
+/* FOOTER */
+footer {
+  text-align: center;
+  padding: 20px;
+  margin-top: 40px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  table th, table td {
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  .container {
+    margin: 20px auto;
+  }
+}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Entry / Exit Logs</h1>
+  <p>QR Code Based Crowd Monitoring System</p>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h2>Movement Records</h2>
+    <p>
+      This section displays the entry and exit records captured through
+      QR code scanning at the gate.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>QR Code ID</th>
+          <th>Type</th>
+          <th>Date</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody id="alertsBody">
+      </tbody>
+    </table>
+  </div>
+
+
+
+  
+
+  <a href="frontend.html" class="btn">⬅ Back to Home</a>
+
+</div>
+
+<script>
+  const API_BASE = "http://localhost:8081";
+
+  function formatDateTime(isoString) {
+    const d = new Date(isoString);
+    return {
+      date: d.toLocaleDateString(),
+      time: d.toLocaleTimeString()
+    };
+  }
+
+  async function loadAlerts() {
+    try {
+      const res = await fetch(API_BASE + "/api/admin/entries");
+      const entries = await res.json();
+      const tbody = document.getElementById("alertsBody");
+      tbody.innerHTML = "";
+
+      (Array.isArray(entries) ? entries : []).forEach(e => {
+        const tr = document.createElement("tr");
+        const dt = formatDateTime(e.time);
+
+        tr.innerHTML = `
+          <td>${e.id}</td>
+          <td>${e.movementType} (${e.status}) - User ${e.userId}</td>
+          <td>${dt.date}</td>
+          <td>${dt.time}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (e) {
+      console.error("Failed to load logs", e);
+    }
+  }
+
+  loadAlerts();
+  setInterval(loadAlerts, 5000);
+</script>
+
+</body>
+</html>
